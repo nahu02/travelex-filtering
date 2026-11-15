@@ -87,6 +87,12 @@ export interface Snapshot {
   resorts: Record<string, [number, number]>;
 }
 
+export interface Rating {
+  rating: number | null;
+  count?: number;
+  url?: string | null;
+}
+
 export interface Pick {
   type: AptType;
   count: number;

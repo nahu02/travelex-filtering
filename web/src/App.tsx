@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AccommodationDialog, ResortDialog, ResortsTab } from "./Details";
+import { AccommodationDialog, ResortDialog, ResortsTab, Stars } from "./Details";
 import {
   allocate,
   bookingUrl,
@@ -13,6 +13,7 @@ import {
   type ChangeEvent,
   type Data,
   type Mode,
+  type Rating,
   type Resort,
   type Snapshot,
   type Week,
@@ -20,7 +21,7 @@ import {
 
 type Tab = "offers" | "resorts" | "sellout" | "changes";
 type Detail = { resort: Resort; acc?: Accommodation } | null;
-type Sort = "price" | "priceDesc" | "date" | "km" | "distance";
+type Sort = "price" | "priceDesc" | "date" | "km" | "distance" | "rating";
 
 interface Filters {
   people: number;
@@ -32,6 +33,7 @@ interface Filters {
   minKm: string;
   maxDist: string;
   maxCap: string;
+  minRating: string;
   noEmpty: boolean;
   course: boolean;
   sort: Sort;
@@ -47,6 +49,7 @@ const DEFAULTS: Filters = {
   minKm: "",
   maxDist: "",
   maxCap: "",
+  minRating: "",
   noEmpty: false,
   course: false,
   sort: "price",
@@ -69,6 +72,7 @@ interface Offer {
   week: Week;
   alloc: Allocation;
   fullTypes: number;
+  rating?: Rating;
 }
 
 async function getJson<T>(name: string, fallback?: T): Promise<T> {
@@ -84,6 +88,7 @@ export default function App() {
   const [data, setData] = useState<Data | null>(null);
   const [events, setEvents] = useState<ChangeEvent[]>([]);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
+  const [ratings, setRatings] = useState<Record<string, Rating>>({});
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("offers");
   const [f, setF] = useState<Filters>(loadFilters);
@@ -94,6 +99,7 @@ export default function App() {
     getJson<Data>("data.json").then(setData, (e) => setError(String(e.message ?? e)));
     getJson<ChangeEvent[]>("events.json", []).then(setEvents, () => {});
     getJson<Snapshot[]>("sellout.json", []).then(setSnapshots, () => {});
+    getJson<Record<string, Rating>>("ratings.json", {}).then(setRatings, () => {});
   }, []);
 
   useEffect(() => {
@@ -113,6 +119,8 @@ export default function App() {
     return [...m.entries()].sort(([a], [b]) => a.localeCompare(b));
   }, [data]);
 
+  const hasRatings = useMemo(() => Object.values(ratings).some((r) => r.rating != null), [ratings]);
+
   const offers = useMemo(() => {
     if (!data) return [];
     const out: Offer[] = [];
@@ -120,6 +128,7 @@ export default function App() {
     const max = Number(f.maxPrice) || Infinity;
     const minKm = Number(f.minKm) || 0;
     const maxDist = Number(f.maxDist) || Infinity;
+    const minRating = hasRatings ? Number(f.minRating) || 0 : 0;
     const opts = { maxCapacity: Number(f.maxCap) || undefined, noEmptyBeds: f.noEmpty };
     // Selections that no longer exist in the data (e.g. a past week) must not hide everything.
     const weeks = f.weeks.filter((w) => allWeeks.some(([s]) => s === w));
@@ -129,13 +138,15 @@ export default function App() {
       if ((resort.km ?? 0) < minKm) continue;
       for (const acc of resort.accommodations) {
         if (maxDist !== Infinity && (acc.distanceM == null || acc.distanceM > maxDist)) continue;
+        const rating = ratings[acc.id]?.rating != null ? ratings[acc.id] : undefined;
+        if (minRating && (rating?.rating ?? 0) < minRating) continue;
         for (const week of acc.weeks) {
           if (weeks.length && !weeks.includes(week.start)) continue;
           if (f.course && !resort.courseWeeks.includes(week.start)) continue;
           const alloc = allocate(week, acc.types, f.people, f.mode, opts);
           if (!alloc || alloc.perPerson < min || alloc.perPerson > max) continue;
           const fullTypes = Object.values(week.cells).filter((c) => c.full).length;
-          out.push({ resort, acc, week, alloc, fullTypes });
+          out.push({ resort, acc, week, alloc, fullTypes, rating });
         }
       }
     }
@@ -145,9 +156,10 @@ export default function App() {
       date: (a, b) => a.week.start.localeCompare(b.week.start) || a.alloc.total - b.alloc.total,
       km: (a, b) => (b.resort.km ?? 0) - (a.resort.km ?? 0) || a.alloc.total - b.alloc.total,
       distance: (a, b) => (a.acc.distanceM ?? 1e9) - (b.acc.distanceM ?? 1e9) || a.alloc.total - b.alloc.total,
+      rating: (a, b) => (b.rating?.rating ?? 0) - (a.rating?.rating ?? 0) || a.alloc.total - b.alloc.total,
     };
     return out.sort(by[f.sort]);
-  }, [data, f, allWeeks]);
+  }, [data, f, allWeeks, ratings, hasRatings]);
 
   const toggle = <T,>(list: T[], item: T) => (list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
 
@@ -293,6 +305,21 @@ export default function App() {
                 </select>
               </div>
 
+              {hasRatings && (
+                <div className="field">
+                  <label htmlFor="minRating">Google-értékelés</label>
+                  <select id="minRating" value={f.minRating} onChange={(e) => set("minRating", e.target.value)}>
+                    <option value="">mindegy</option>
+                    {[3.5, 4, 4.5].map((r) => (
+                      <option key={r} value={r}>
+                        legalább {r.toLocaleString("hu-HU", { minimumFractionDigits: 1 })} ★
+                      </option>
+                    ))}
+                  </select>
+                  {f.minRating && <p className="hint">Az értékelés nélküli szállások ilyenkor nem látszanak.</p>}
+                </div>
+              )}
+
               <label className="check">
                 <input type="checkbox" checked={f.noEmpty} onChange={(e) => set("noEmpty", e.target.checked)} />
                 Csak üres ágy nélküli beosztás
@@ -320,6 +347,7 @@ export default function App() {
                     <option value="date">Időpont szerint</option>
                     <option value="km">Legnagyobb síterep elöl</option>
                     <option value="distance">Pályához legközelebb</option>
+                    {hasRatings && <option value="rating">Legjobb értékelés elöl</option>}
                   </select>
                 </label>
               </div>
@@ -359,7 +387,7 @@ export default function App() {
             }}
           />
         )}
-        {detail?.acc && <AccommodationDialog resort={detail.resort} acc={detail.acc} onClose={() => setDetail(null)} />}
+        {detail?.acc && <AccommodationDialog resort={detail.resort} acc={detail.acc} rating={ratings[detail.acc.id]} onClose={() => setDetail(null)} />}
         {detail && !detail.acc && <ResortDialog resort={detail.resort} onClose={() => setDetail(null)} />}
 
         {data && tab === "sellout" && <Sellout data={data} snapshots={snapshots} />}
@@ -400,6 +428,7 @@ function OfferCard({ offer, people, mode, events, onDetail }: { offer: Offer; pe
           </button>
         </h3>
         <p className="when">{fmtWeek(week.start, week.end)}</p>
+        {offer.rating && <Stars rating={offer.rating} />}
         <ul className="facts">
           <li>
             {alloc.picks.map((p) => `${p.count} × ${p.type.label}`).join(" + ")}

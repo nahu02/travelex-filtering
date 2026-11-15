@@ -1,8 +1,33 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { Accommodation, Resort } from "./lib";
+import type { Accommodation, Rating, Resort } from "./lib";
 
 const search = (q: string) => `https://www.google.com/search?q=${encodeURIComponent(q)}`;
 const plainName = (name: string) => name.replace(/\*+/g, "").replace(/\s+/g, " ").trim();
+
+/** Google Maps rating as stars; links to the place's reviews on Google Maps. */
+export function Stars({ rating }: { rating: Rating }) {
+  if (rating.rating == null) return null;
+  const value = rating.rating.toLocaleString("hu-HU", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const label = `Google-értékelés: ${value} az 5-ből${rating.count ? `, ${rating.count} vélemény alapján` : ""}`;
+  const body = (
+    <>
+      <span className="stars" aria-hidden="true">
+        <span style={{ width: `${(rating.rating / 5) * 100}%` }}>★★★★★</span>
+      </span>
+      <strong>{value}</strong>
+      {rating.count ? <span className="muted">({rating.count.toLocaleString("hu-HU")} Google-vélemény)</span> : <span className="muted">Google</span>}
+    </>
+  );
+  return rating.url ? (
+    <a className="rating" href={rating.url} target="_blank" rel="noreferrer" aria-label={`${label} – vélemények megnyitása a Google Térképen`} title="Vélemények a Google Térképen">
+      {body}
+    </a>
+  ) : (
+    <span className="rating" role="img" aria-label={label}>
+      {body}
+    </span>
+  );
+}
 
 export function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -122,7 +147,7 @@ export function ResortDialog({ resort, onClose }: { resort: Resort; onClose: () 
   );
 }
 
-export function AccommodationDialog({ resort, acc, onClose }: { resort: Resort; acc: Accommodation; onClose: () => void }) {
+export function AccommodationDialog({ resort, acc, rating, onClose }: { resort: Resort; acc: Accommodation; rating?: Rating; onClose: () => void }) {
   const photos = acc.photos ?? [];
   const [i, setI] = useState(0);
   const step = (d: number) => setI((p) => (p + d + photos.length) % photos.length);
@@ -143,6 +168,7 @@ export function AccommodationDialog({ resort, acc, onClose }: { resort: Resort; 
         {acc.subtitle ? ` · ${acc.subtitle}` : ""}
         {acc.distance ? ` · pálya: ${acc.distance}` : ""}
       </p>
+      {rating && <Stars rating={rating} />}
       {photos.length > 0 && (
         <div
           className="gallery"

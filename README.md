@@ -28,6 +28,19 @@ The site is built with a relative base path, so it works at
 2. Repository **Settings → Pages → Source: GitHub Actions**.
 3. Run the *Scrape and deploy* workflow once from the Actions tab (or wait for the schedule).
 
+## Google Maps ratings (optional)
+
+Ratings come from the official Places API (New), so they need an API key:
+
+1. In Google Cloud, create a project, enable **Places API (New)** and create an API key
+   (restrict it to that API).
+2. Add it to the repository as a secret named `GOOGLE_MAPS_API_KEY`
+   (Settings → Secrets and variables → Actions).
+
+`scraper/ratings.py` then looks up each accommodation that has a Maps link on Travelex and
+writes `web/public/data/ratings.json`; entries are refreshed weekly. Without the secret the
+step does nothing and the UI hides the stars, rating filter and rating sort.
+
 ## Running locally
 
 ```sh
