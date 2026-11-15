@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import sys
@@ -26,7 +27,8 @@ from urllib.parse import unquote_plus, urljoin
 import requests
 
 SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
-FIELDS = ["places.id", "places.displayName", "places.rating", "places.userRatingCount", "places.googleMapsUri"]
+FIELDS = ["places.id", "places.displayName", "places.rating", "places.userRatingCount", "places.googleMapsUri", "places.location"]
+MAX_DISTANCE_M = 600  # a match further than this from the Travelex pin is treated as the wrong place
 REVIEWS_FIELD = "places.googleMapsLinks.reviewsUri"
 UA = "Mozilla/5.0 (compatible; travelex-filter/1.0)"
 TS = "%Y-%m-%dT%H:%M:%SZ"
@@ -58,9 +60,26 @@ def resolve(session: requests.Session, url: str) -> dict | None:
     return parse_place_url(url)
 
 
-def lookup(session: requests.Session, key: str, place: dict) -> dict | None:
+def distance_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    a = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lng2 - lng1) / 2) ** 2
+    return 6371000 * 2 * math.asin(math.sqrt(a))
+
+
+def queries(place: dict, acc_name: str, resort_name: str) -> list[str]:
+    """Search texts to try, best first.
+
+    Some Travelex links are bare coordinate pins ("44°11'08.4\"N 7°09'34.3\"E") rather than
+    places; for those, and as a fallback, search by the accommodation's own name.
+    """
+    own = re.sub(r"\*+", "", acc_name.split(" - ")[0]).strip() + " " + resort_name
+    is_pin = bool(re.match(r"^\s*-?\d+[°.]", place["name"]))
+    return [own] if is_pin else [place["name"], own]
+
+
+def lookup(session: requests.Session, key: str, query: str, place: dict) -> dict | None:
     body = {
-        "textQuery": place["name"],
+        "textQuery": query,
         "pageSize": 1,
         "languageCode": "hu",
         "locationBias": {
@@ -82,6 +101,9 @@ def lookup(session: requests.Session, key: str, place: dict) -> dict | None:
     if not places:
         return None
     p = places[0]
+    loc = p.get("location") or {}
+    if "latitude" in loc and distance_m(place["lat"], place["lng"], loc["latitude"], loc["longitude"]) > MAX_DISTANCE_M:
+        return None
     if p.get("rating") is None:
         return None
     return {
@@ -107,21 +129,32 @@ def update(data: dict, ratings: dict, key: str, session: requests.Session, max_a
             old = ratings.get(aid)
             fresh = (
                 old
+                and old.get("rating") is not None  # misses are cheap to retry and may start matching
                 and old.get("link") == link
                 and now - datetime.strptime(old["checkedAt"], TS).replace(tzinfo=timezone.utc) < max_age
             )
             if fresh:
                 out[aid] = old
                 continue
+            found, failed = None, False
             try:
                 place = resolve(session, link)
-                found = lookup(session, key, place) if place else None
             except requests.RequestException as e:
                 print(f"{acc['name']}: {e}", file=sys.stderr)
+                place, failed = None, True
+            for query in queries(place, acc["name"], resort.get("name", "")) if place else []:
+                try:
+                    found = lookup(session, key, query, place)
+                except requests.RequestException as e:
+                    print(f"{acc['name']} ({query!r}): {e}", file=sys.stderr)
+                    failed = True
+                time.sleep(delay)
+                if found:
+                    break
+            if not found and failed:
                 if old:
                     out[aid] = old
                 continue
-            time.sleep(delay)
             # "rating": None records "looked up, nothing found" so it is not retried every run.
             out[aid] = {**(found or {"rating": None}), "link": link, "checkedAt": now.strftime(TS)}
             print(f"{acc['name']}: {found['rating'] if found else 'nincs értékelés'}", file=sys.stderr)
