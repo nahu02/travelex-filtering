@@ -413,6 +413,14 @@ function OfferCard({ offer, people, mode, events, onDetail }: { offer: Offer; pe
             {fullTypes}/{total} típus megtelt
           </li>
         </ul>
+        <div className="actions">
+          <button onClick={() => onDetail({ resort })}>
+            <MapIcon /> Sítérkép és pályák
+          </button>
+          <button onClick={() => onDetail({ resort, acc })}>
+            <PhotoIcon /> Képek és a szállás helye
+          </button>
+        </div>
         {change && change.old != null && change.new != null && (
           <p className={change.new < change.old ? "delta down" : "delta up"}>
             {change.new < change.old ? "↓ Olcsóbb lett" : "↑ Drágább lett"}: {fmtEur(change.old)} → {fmtEur(change.new)} / fő
@@ -429,6 +437,27 @@ function OfferCard({ offer, people, mode, events, onDetail }: { offer: Offer; pe
         </a>
       </div>
     </article>
+  );
+}
+
+const icon = { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true } as const;
+
+function MapIcon() {
+  return (
+    <svg {...icon}>
+      <path d="M3 19 9 7l4 7 3-4 5 9Z" />
+      <path d="m9 7 1.5 3" />
+    </svg>
+  );
+}
+
+function PhotoIcon() {
+  return (
+    <svg {...icon}>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <circle cx="9" cy="10" r="1.6" />
+      <path d="m21 16-5-5-7 8" />
+    </svg>
   );
 }
 

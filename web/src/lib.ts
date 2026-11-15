@@ -34,6 +34,8 @@ export interface Accommodation {
   image: string | null;
   url?: string;
   photos?: { src: string; thumb: string; caption: string | null }[];
+  /** Piste map with this accommodation's location marked (not available everywhere). */
+  pisteMap?: string | null;
   townMap?: string | null;
   gmaps?: string | null;
   types: AptType[];

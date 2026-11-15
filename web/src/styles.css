@@ -1037,3 +1037,41 @@ button.where:hover,
   background: linear-gradient(160deg, var(--indigo), var(--aurora-2)) center / cover;
   cursor: zoom-in;
 }
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--glass-strong);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.actions button:hover {
+  border-color: var(--ice);
+  background: rgba(191, 227, 255, 0.22);
+}
+
+.actions svg {
+  color: var(--ice);
+}
+
+.maps {
+  display: grid;
+  gap: 10px;
+}
+
+.maps .segmented {
+  justify-self: start;
+  min-width: min(320px, 100%);
+}

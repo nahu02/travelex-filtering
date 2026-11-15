@@ -127,6 +127,15 @@ export function AccommodationDialog({ resort, acc, onClose }: { resort: Resort; 
   const [i, setI] = useState(0);
   const step = (d: number) => setI((p) => (p + d + photos.length) % photos.length);
   const query = `${plainName(acc.name)} ${resort.name}`;
+  const [mapIdx, setMapIdx] = useState(0);
+  const maps = [
+    acc.pisteMap
+      ? { label: "Sítérkép", src: acc.pisteMap, note: "A szállás helye a sítérképen" }
+      : resort.map
+        ? { label: "Sítérkép", src: resort.map, note: "Általános sítérkép (a szállás nincs rajta jelölve)" }
+        : null,
+    acc.townMap ? { label: "Várostérkép", src: acc.townMap, note: "A szállás helye a településen" } : null,
+  ].filter((m): m is { label: string; src: string; note: string } => m !== null);
   return (
     <Dialog title={acc.name} onClose={onClose}>
       <p className="muted">
@@ -172,10 +181,24 @@ export function AccommodationDialog({ resort, acc, onClose }: { resort: Resort; 
           </div>
         </div>
       )}
+      {maps.length > 0 && (
+        <section className="maps">
+          <div className="segmented" style={{ gridTemplateColumns: `repeat(${maps.length}, 1fr)` }}>
+            {maps.map((m, n) => (
+              <button key={m.src} className={n === mapIdx ? "on" : ""} aria-pressed={n === mapIdx} onClick={() => setMapIdx(n)}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <a className="pistemap" href={maps[mapIdx].src} target="_blank" rel="noreferrer" title="Megnyitás teljes méretben">
+            <img key={maps[mapIdx].src} src={maps[mapIdx].src} alt={`${acc.name}: ${maps[mapIdx].label}`} loading="lazy" />
+            <span>{maps[mapIdx].note} · megnyitás teljes méretben ↗</span>
+          </a>
+        </section>
+      )}
       <div className="links">
         <ExtLink href={acc.url ?? `${resort.url}/szallas`}>Részletes leírás a Travelexen</ExtLink>
         <ExtLink href={acc.gmaps ?? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`}>Google Térkép</ExtLink>
-        {acc.townMap && <ExtLink href={acc.townMap}>Várostérkép</ExtLink>}
         <ExtLink href={search(query)}>Keresés a neten (képek, értékelések)</ExtLink>
       </div>
     </Dialog>

@@ -226,6 +226,7 @@ def parse_accommodations(page: str, resort_url: str = "") -> list[dict]:
                 "image": thumb.get("data-thumb") if thumb else None,
                 "url": f"{resort_url}/szallas" + (f"#{sec.get('id')}" if sec else ""),
                 "photos": parse_photos(sec),
+                "pisteMap": find_link(sec, "sítérkép"),
                 "townMap": find_link(sec, "várostérkép"),
                 "gmaps": find_link(sec, "google térkép", "google maps"),
                 "types": types,
