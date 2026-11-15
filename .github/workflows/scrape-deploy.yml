@@ -31,7 +31,10 @@ jobs:
       - name: Scrape travelex.si
         run: |
           pip install -r scraper/requirements.txt
-          python scraper/scrape.py --out web/public/data
+          # If travelex.si is unreachable or serves an unexpected page, keep the last
+          # committed data and still deploy, rather than failing the whole run.
+          python scraper/scrape.py --out web/public/data \
+            || echo "::warning title=Scrape failed::travelex.si could not be scraped; deploying with the previous data."
 
       - name: Refresh Google Maps ratings
         # Skipped (and the site simply shows no ratings) until the secret is added.

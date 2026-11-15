@@ -24,7 +24,7 @@ from bs4 import BeautifulSoup
 
 BASE = "https://travelex.si"
 LIST_URL = f"{BASE}/siutjaink"
-UA = "Mozilla/5.0 (compatible; travelex-filter/1.0)"
+UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 MAX_EVENTS = 5000
 MAX_SNAPSHOTS = 2000
 MODES = ("car", "bus", "flight")
@@ -52,18 +52,28 @@ def storage_url(path: str | None) -> str | None:
     return path if path.startswith("http") else f"{BASE}/storage/{path.lstrip('/')}"
 
 
-def fetch(session: requests.Session, url: str) -> str:
-    for attempt in range(4):
+def fetch(session: requests.Session, url: str, marker: str) -> str:
+    """GET a page, retrying on errors and on responses that lack the expected content.
+
+    The site occasionally answers 200 with a page that has none of the data (seen from
+    CI), so a successful status alone is not enough.
+    """
+    problem = ""
+    for attempt in range(5):
+        if attempt:
+            time.sleep(5 * 2 ** (attempt - 1))
         try:
             r = session.get(url, timeout=60)
             r.raise_for_status()
             r.encoding = "utf-8"
-            return r.text
-        except requests.RequestException:
-            if attempt == 3:
-                raise
-            time.sleep(2 ** (attempt + 1))
-    raise AssertionError("unreachable")
+            if marker in r.text:
+                return r.text
+            title = re.search(r"<title>\s*(.*?)\s*</title>", r.text, re.S)
+            problem = f"HTTP {r.status_code}, {len(r.text)} bytes, no {marker!r}; title: {clean(title.group(1))[:80] if title else '-'}"
+        except requests.RequestException as e:
+            problem = str(e)
+        print(f"{url}: {problem} (attempt {attempt + 1}/5)", file=sys.stderr)
+    raise RuntimeError(f"could not fetch {url}: {problem}")
 
 
 def num(value) -> float | int | None:
@@ -329,17 +339,17 @@ def main() -> int:
     session = requests.Session()
     session.headers["User-Agent"] = UA
 
-    def get(url: str, name: str) -> str:
+    def get(url: str, name: str, marker: str) -> str:
         if args.from_dir:
             return (args.from_dir / name).read_text(encoding="utf-8", errors="replace")
         time.sleep(args.delay)
-        return fetch(session, url)
+        return fetch(session, url, marker)
 
-    resorts = parse_resorts(get(LIST_URL, "siutjaink.html"))
+    resorts = parse_resorts(get(LIST_URL, "siutjaink.html", "SCS.setCategories"))
     for r in resorts:
         slug = r["url"].rstrip("/").rsplit("/", 1)[-1]
         r["accommodations"] = parse_accommodations(
-            get(f"{r['url']}/szallas", f"sz_{slug}.html"), r["url"]
+            get(f"{r['url']}/szallas", f"sz_{slug}.html", "pricesTable"), r["url"]
         )
         print(f"{r['name']}: {len(r['accommodations'])} szállás", file=sys.stderr)
 
