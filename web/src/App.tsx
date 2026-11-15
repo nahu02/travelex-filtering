@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { AccommodationDialog, ResortDialog, ResortsTab } from "./Details";
 import {
   allocate,
   bookingUrl,
@@ -17,7 +18,8 @@ import {
   type Week,
 } from "./lib";
 
-type Tab = "offers" | "sellout" | "changes";
+type Tab = "offers" | "resorts" | "sellout" | "changes";
+type Detail = { resort: Resort; acc?: Accommodation } | null;
 type Sort = "price" | "priceDesc" | "date" | "km" | "distance";
 
 interface Filters {
@@ -86,6 +88,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("offers");
   const [f, setF] = useState<Filters>(loadFilters);
   const [shown, setShown] = useState(PAGE);
+  const [detail, setDetail] = useState<Detail>(null);
 
   useEffect(() => {
     getJson<Data>("data.json").then(setData, (e) => setError(String(e.message ?? e)));
@@ -172,6 +175,7 @@ export default function App() {
           {(
             [
               ["offers", "Ajánlatok"],
+              ["resorts", "Síterepek"],
               ["sellout", "Telítettség"],
               ["changes", "Változások"],
             ] as [Tab, string][]
@@ -327,7 +331,7 @@ export default function App() {
               )}
 
               {offers.slice(0, shown).map((o) => (
-                <OfferCard key={`${o.acc.id}-${o.week.start}`} offer={o} people={f.people} mode={f.mode} events={events} />
+                <OfferCard key={`${o.acc.id}-${o.week.start}`} offer={o} people={f.people} mode={f.mode} events={events} onDetail={setDetail} />
               ))}
 
               {offers.length > shown && (
@@ -345,6 +349,19 @@ export default function App() {
           </div>
         )}
 
+        {data && tab === "resorts" && (
+          <ResortsTab
+            resorts={data.resorts}
+            onOpen={(resort) => setDetail({ resort })}
+            onOffers={(resort) => {
+              set("resorts", [resort.id]);
+              setTab("offers");
+            }}
+          />
+        )}
+        {detail?.acc && <AccommodationDialog resort={detail.resort} acc={detail.acc} onClose={() => setDetail(null)} />}
+        {detail && !detail.acc && <ResortDialog resort={detail.resort} onClose={() => setDetail(null)} />}
+
         {data && tab === "sellout" && <Sellout data={data} snapshots={snapshots} />}
         {data && tab === "changes" && <Changes events={events} />}
       </main>
@@ -360,7 +377,7 @@ export default function App() {
   );
 }
 
-function OfferCard({ offer, people, mode, events }: { offer: Offer; people: number; mode: Mode; events: ChangeEvent[] }) {
+function OfferCard({ offer, people, mode, events, onDetail }: { offer: Offer; people: number; mode: Mode; events: ChangeEvent[]; onDetail: (d: Detail) => void }) {
   const { resort, acc, week, alloc, fullTypes } = offer;
   const total = Object.keys(week.cells).length;
   const picked = new Set(alloc.picks.map((p) => p.type.key));
@@ -370,12 +387,18 @@ function OfferCard({ offer, people, mode, events }: { offer: Offer; people: numb
 
   return (
     <article className="card">
-      <div className="thumb" style={acc.image ? { backgroundImage: `url(${acc.image})` } : undefined} role="img" aria-label={acc.name} />
+      <button className="thumb" style={acc.image ? { backgroundImage: `url(${acc.image})` } : undefined} onClick={() => onDetail({ resort, acc })} aria-label={`${acc.name}: képek és részletek`}>
+        {(acc.photos?.length ?? 0) > 0 && <span>{acc.photos!.length} kép</span>}
+      </button>
       <div className="card-body">
-        <p className="where">
-          {resort.name} · {resort.km} km pálya{resort.peak ? ` · ${resort.peak} m` : ""}
-        </p>
-        <h3>{acc.name}</h3>
+        <button className="where" onClick={() => onDetail({ resort })} title="Sítérkép és a síterep adatai">
+          {resort.name} · {resort.km} km pálya{resort.peak ? ` · ${resort.peak} m` : ""} <span aria-hidden="true">›</span>
+        </button>
+        <h3>
+          <button onClick={() => onDetail({ resort, acc })} title="Képek és részletek">
+            {acc.name}
+          </button>
+        </h3>
         <p className="when">{fmtWeek(week.start, week.end)}</p>
         <ul className="facts">
           <li>

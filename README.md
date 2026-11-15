@@ -13,6 +13,9 @@ The original site cannot filter by price or by what is still bookable; this one 
   distance to the slopes and apartment size. For each accommodation and week it computes
   the cheapest apartment combination for the group, including empty-bed fees, and links
   to the travelex.si calculator pre-filled with that selection.
+  Each offer opens a resort view (piste map, piste mix, lifts, official website) and an
+  accommodation view (photo gallery, map and Travelex links); the *Síterepek* tab lists
+  all resorts. Official resort websites live in the `WEBSITES` table in the scraper.
 - **Automation** (`.github/workflows/scrape-deploy.yml`): every 6 hours scrapes, commits
   the data when something changed, and deploys to GitHub Pages.
 

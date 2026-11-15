@@ -32,6 +32,10 @@ export interface Accommodation {
   distance: string | null;
   distanceM: number | null;
   image: string | null;
+  url?: string;
+  photos?: { src: string; thumb: string; caption: string | null }[];
+  townMap?: string | null;
+  gmaps?: string | null;
   types: AptType[];
   weeks: Week[];
 }
@@ -45,6 +49,11 @@ export interface Resort {
   kmByColor: Record<string, number | null>;
   peak: number | null;
   height: string | null;
+  lifts?: Record<string, number>;
+  map?: string | null;
+  programs?: string | null;
+  video?: string | null;
+  website?: string | null;
   courseWeeks: string[];
   accommodations: Accommodation[];
 }

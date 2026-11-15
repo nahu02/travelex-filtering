@@ -29,6 +29,28 @@ MAX_EVENTS = 5000
 MAX_SNAPSHOTS = 2000
 MODES = ("car", "bus", "flight")
 
+# Official resort websites are not on travelex.si, so they are maintained here by resort id.
+# A resort missing from this table simply gets a web-search link in the UI.
+WEBSITES = {
+    12: "https://www.lesorres.com",
+    2: "https://isola2000.com",
+    8: "https://www.les2alpes.com",
+    9: "https://www.serre-chevalier.com",
+    10: "https://www.alpedhuez.com",
+    1: "https://www.tignes.net",
+    13: "https://www.sybelles.ski",
+    25: "https://montgenevre.com",
+    19: "https://paradiski.com",
+    14: "https://www.saintgervais.com",
+    16: "https://www.les3vallees.com",
+}
+
+
+def storage_url(path: str | None) -> str | None:
+    if not path:
+        return None
+    return path if path.startswith("http") else f"{BASE}/storage/{path.lstrip('/')}"
+
 
 def fetch(session: requests.Session, url: str) -> str:
     for attempt in range(4):
@@ -75,6 +97,8 @@ def parse_resorts(page: str) -> list[dict]:
     for c in cats:
         p = c.get("parameters") or {}
         track = p.get("tracklength") or {}
+        docs = p.get("documents") or {}
+        lift = p.get("lift") or {}
         course_weeks = sorted(
             {iso_period(d["date"])[0] for d in c.get("dates", []) if d.get("course")}
         )
@@ -90,6 +114,13 @@ def parse_resorts(page: str) -> list[dict]:
                 },
                 "peak": num(p.get("peak")),
                 "height": p.get("height"),
+                "lifts": {
+                    k: num(lift.get(k)) or 0 for k in ("cabine", "seating", "pulling", "railway")
+                },
+                "map": storage_url(docs.get("map")),
+                "programs": storage_url(docs.get("programs")),
+                "video": p.get("youtube_link"),
+                "website": WEBSITES.get(c["id"]),
                 "courseWeeks": course_weeks,
                 "accommodations": [],
             }
@@ -117,7 +148,26 @@ def parse_type(th) -> dict:
     return {"key": key, "label": label, "capacity": int(caps[-1]) if caps else None}
 
 
-def parse_accommodations(page: str) -> list[dict]:
+def find_link(sec, *needles: str) -> str | None:
+    for a in sec.select("a[href]") if sec else []:
+        label = clean(a.get_text()).lower()
+        if any(n in label for n in needles):
+            return a["href"]
+    return None
+
+
+def parse_photos(sec) -> list[dict]:
+    photos = []
+    for li in sec.select("li[data-thumb]") if sec else []:
+        a = li.find("a", href=True)
+        if a:
+            photos.append(
+                {"src": a["href"], "thumb": li["data-thumb"], "caption": clean(li.get_text(" ")) or None}
+            )
+    return photos
+
+
+def parse_accommodations(page: str, resort_url: str = "") -> list[dict]:
     soup = BeautifulSoup(page, "lxml")
     out = []
     for table in soup.select("table[id^=pricesTable]"):
@@ -174,6 +224,10 @@ def parse_accommodations(page: str) -> list[dict]:
                 "distance": clean(dist.group(1)) if dist else None,
                 "distanceM": num(re.split(r"[-–]", dist.group(1))[-1]) if dist else None,
                 "image": thumb.get("data-thumb") if thumb else None,
+                "url": f"{resort_url}/szallas" + (f"#{sec.get('id')}" if sec else ""),
+                "photos": parse_photos(sec),
+                "townMap": find_link(sec, "várostérkép"),
+                "gmaps": find_link(sec, "google térkép", "google maps"),
                 "types": types,
                 "weeks": weeks,
             }
@@ -283,7 +337,9 @@ def main() -> int:
     resorts = parse_resorts(get(LIST_URL, "siutjaink.html"))
     for r in resorts:
         slug = r["url"].rstrip("/").rsplit("/", 1)[-1]
-        r["accommodations"] = parse_accommodations(get(f"{r['url']}/szallas", f"sz_{slug}.html"))
+        r["accommodations"] = parse_accommodations(
+            get(f"{r['url']}/szallas", f"sz_{slug}.html"), r["url"]
+        )
         print(f"{r['name']}: {len(r['accommodations'])} szállás", file=sys.stderr)
 
     n_cells = sum(len(w["cells"]) for r in resorts for a in r["accommodations"] for w in a["weeks"])
